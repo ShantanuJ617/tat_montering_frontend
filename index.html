@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Treasury TAT Monitor | Excel Export</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; --border: #e2e8f0; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 2rem; color: #1e293b; }
+        .container { max-width: 1350px; margin: auto; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        
+        /* Header & Form */
+        .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .form-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; background: #ffffff; padding: 1.5rem; border: 1px solid var(--border); border-radius: 8px; }
+        .input-box { display: flex; flex-direction: column; }
+        label { font-size: 0.75rem; font-weight: 700; margin-bottom: 0.4rem; color: #64748b; text-transform: uppercase; }
+        input, select { padding: 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; }
+        
+        .btn-add { background: var(--primary); color: white; border: none; padding: 0.75rem; border-radius: 6px; cursor: pointer; font-weight: bold; align-self: flex-end; }
+        .btn-export { background: #16a34a; color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 8px; }
+
+        /* Table Styling */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 15px; background: #f8fafc; color: #64748b; font-size: 0.7rem; border-bottom: 2px solid var(--border); text-transform: uppercase; }
+        td { padding: 15px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 0.85rem; }
+        
+        .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 800; display: inline-block; }
+        .status-open { background: #dcfce7; color: #166534; }
+        .status-closed { background: #f1f5f9; color: #475569; }
+        .status-query { background: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+        
+        /* Collapsed Update UI */
+        .log-drawer { display: none; background: #fcfdfe; padding: 20px; border-bottom: 3px solid var(--primary); }
+        .update-controls { background: #fff; border: 1px solid #cbd5e1; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; gap: 10px; align-items: flex-end; }
+        .log-entry { font-size: 0.85rem; padding: 8px 0; border-bottom: 1px dashed #cbd5e1; }
+        .log-date { font-weight: bold; color: #2563eb; margin-right: 10px; font-family: monospace; }
+
+        .btn-manage { background: #64748b; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-area">
+        <h2 style="margin: 0;">Treasury TAT Monitor</h2>
+        <button class="btn-export" onclick="exportToExcel()">
+            <span>📥</span> Download Excel Report
+        </button>
+    </div>
+    
+    <div class="form-group">
+        <div class="input-box">
+            <label>Segment</label>
+            <select id="segment">
+                <option value="Securities">Securities</option>
+                <option value="Triparty Repo">Triparty Repo</option>
+                <option value="Forex">Forex</option>
+                <option value="Derivatives">Derivatives</option>
+            </select>
+        </div>
+        <div class="input-box"><label>Subject *</label><input type="text" id="subject" placeholder="Mandatory" required></div>
+        <div class="input-box">
+            <label>Membership</label>
+            <select id="membership"><option>New Member</option><option>Existing Member</option></select>
+        </div>
+        <div class="input-box"><label>Date of Issue</label><input type="date" id="issueDate"></div>
+        <div class="input-box">
+            <label>Assignee</label>
+            <select id="assignedTo"><option>Shantanu</option><option>Rohan</option></select>
+        </div>
+        <button class="btn-add" onclick="addEntry()">Create Record</button>
+    </div>
+
+    <table id="tatTable">
+        <thead>
+            <tr>
+                <th>Segment & Subject</th>
+                <th>Issue Date</th>
+                <th>Last Update</th>
+                <th>Completion (TAT)</th>
+                <th>Assigned To</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script>
+    let entryCount = 0;
+    let dataStore = []; // Internal store for Excel export logic
+    document.getElementById('issueDate').valueAsDate = new Date();
+
+    function addEntry() {
+        const segment = document.getElementById('segment').value;
+        const subject = document.getElementById('subject').value.trim();
+        const membership = document.getElementById('membership').value;
+        const assignedTo = document.getElementById('assignedTo').value;
+        const issueDateVal = document.getElementById('issueDate').value;
+
+        if (!subject) { alert("Subject is mandatory."); return; }
+
+        entryCount++;
+        const dateObj = new Date(issueDateVal);
+        const completionDateObj = new Date(dateObj);
+        completionDateObj.setDate(dateObj.getDate() + 2);
+
+        // Store data for export
+        const newRecord = {
+            id: entryCount,
+            segment, subject, membership, assignedTo,
+            issueDate: dateObj.toLocaleDateString(),
+            lastUpdate: new Date().toLocaleDateString(),
+            completion: completionDateObj.toLocaleDateString(),
+            status: 'Open',
+            lastComment: 'Record Created'
+        };
+        dataStore.push(newRecord);
+
+        const tbody = document.getElementById('tableBody');
+        const row = document.createElement('tr');
+        row.id = `main-row-${entryCount}`;
+        
+        row.innerHTML = `
+            <td><strong>${segment}</strong><br><small style="color:#2563eb">${subject}</small></td>
+            <td>${newRecord.issueDate}</td>
+            <td id="last-updated-${entryCount}">${newRecord.lastUpdate}</td>
+            <td id="tat-val-${entryCount}">${newRecord.completion}</td>
+            <td>${assignedTo}</td>
+            <td id="status-view-${entryCount}"><span class="status-badge status-open">Open</span></td>
+            <td><button class="btn-manage" onclick="toggleLog(${entryCount})">Manage</button></td>
+        `;
+
+        const logRow = document.createElement('tr');
+        logRow.innerHTML = `
+            <td colspan="7" class="log-drawer" id="log-drawer-${entryCount}">
+                <div class="update-controls">
+                    <select id="status-select-${entryCount}"><option>Open</option><option>Closed</option><option>Query Raised</option></select>
+                    <input type="text" id="comment-input-${entryCount}" placeholder="Add comment..." style="flex-grow:1">
+                    <button onclick="updateRecord(${entryCount})" style="background:#10b981; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer">Post</button>
+                </div>
+                <div id="log-content-${entryCount}"></div>
+            </td>
+        `;
+
+        tbody.appendChild(row);
+        tbody.appendChild(logRow);
+        addCommentToLog(entryCount, "INITIALIZED", "Record created.");
+        document.getElementById('subject').value = '';
+    }
+
+    function updateRecord(id) {
+        const newStatus = document.getElementById(`status-select-${id}`).value;
+        const comment = document.getElementById(`comment-input-${id}`).value.trim();
+        const record = dataStore.find(r => r.id === id);
+
+        if (!comment) { alert("Comment required."); return; }
+
+        // Update UI
+        document.getElementById(`status-view-${id}`).innerHTML = `<span class="status-badge status-${newStatus.toLowerCase().replace(' ', '-')}">${newStatus}</span>`;
+        const today = new Date().toLocaleDateString();
+        document.getElementById(`last-updated-${id}`).innerText = today;
+
+        // Update TAT Logic
+        const tatCell = document.getElementById(`tat-val-${id}`);
+        if (newStatus === "Query Raised") {
+            tatCell.innerHTML = `<span class="tat-paused">PAUSED</span>`;
+        } else if (newStatus === "Open") {
+            const res = new Date(); res.setDate(res.getDate() + 2);
+            tatCell.innerHTML = `<strong>${res.toLocaleDateString()}</strong>`;
+            record.completion = res.toLocaleDateString();
+        }
+
+        // Update Store for Excel
+        record.status = newStatus;
+        record.lastComment = comment;
+        record.lastUpdate = today;
+
+        addCommentToLog(id, newStatus.toUpperCase(), comment);
+        document.getElementById(`comment-input-${id}`).value = '';
+    }
+
+    function addCommentToLog(id, status, msg) {
+        const container = document.getElementById(`log-content-${id}`);
+        const stamp = `${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.innerHTML = `<span class="log-date">[${stamp}]</span> <strong>${status}:</strong> ${msg}`;
+        container.prepend(entry);
+    }
+
+    function toggleLog(id) {
+        const drawer = document.getElementById(`log-drawer-${id}`);
+        drawer.style.display = (drawer.style.display === "table-cell") ? "none" : "table-cell";
+    }
+
+    function exportToExcel() {
+        if (dataStore.length === 0) { alert("No data to export."); return; }
+        
+        // Map data to user-friendly column names
+        const exportData = dataStore.map(item => ({
+            "Segment": item.segment,
+            "Subject": item.subject,
+            "Membership": item.membership,
+            "Issue Date": item.issueDate,
+            "Last Updated Date": item.lastUpdate,
+            "Target Completion": item.completion,
+            "Assigned To": item.assignedTo,
+            "Current Status": item.status,
+            "Latest Comment": item.lastComment
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "TAT Report");
+        
+        // Generate and download
+        XLSX.writeFile(workbook, `TAT_Monitoring_Report_${new Date().toLocaleDateString()}.xlsx`);
+    }
+</script>
+
+</body>
+</html>
